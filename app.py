@@ -2,39 +2,63 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-st.set_page_config(page_title="Кондитерская Учет", layout="centered")
+st.set_page_config(page_title="Кондитерская Учет", layout="centered", page_icon="🍰")
 st.title("🍰 Система заказов")
 
-# Твоя ссылка на таблицу
+# Ссылка на твою таблицу (CSV экспорт первого листа)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/1esisqKI9bcqwo7ZtSNKmBMx9hY5RsPgiWO_ThRH250M/export?format=csv&gid=0"
 
-# 1. Чтение данных (через прямую ссылку на CSV)
+# Инициализация корзины заказа в памяти браузера
+if 'order_list' not in st.session_state:
+    st.session_state.order_list = []
+
+# 1. Загрузка данных
 try:
-    # gid=0 — это обычно первый лист (Inventory)
     inventory = pd.read_csv(SHEET_URL)
-    st.success("Данные склада загружены!")
-except Exception as e:
-    st.error("❌ Не удалось прочитать таблицу")
-    st.write("Убедись, что в таблице открыт доступ: 'Все, у кого есть ссылка — Читатель (или Редактор)'")
+    st.sidebar.success("Склад на связи ✅")
+except:
+    st.error("Ошибка обновления данных из Google")
     st.stop()
 
-# 2. Проверка колонок (важно, чтобы названия в таблице были ТОЧНО такими)
-if "Название" not in inventory.columns:
-    st.error(f"В таблице нет колонки 'Название'. Я вижу: {list(inventory.columns)}")
-    st.stop()
-
-# 3. Форма
-with st.form("order_form"):
-    dessert = st.selectbox("Выберите десерт", inventory["Название"].tolist())
-    leftover = st.number_input("Сколько осталось (шт)", min_value=0, step=1)
-    submit = st.form_submit_button("Рассчитать")
-
-if submit:
-    target = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
-    to_order = int(target - leftover) if target > leftover else 0
+# 2. Форма ввода данных
+with st.container():
+    st.subheader("📝 Ввод остатков")
+    col1, col2 = st.columns(2)
     
-    st.info(f"Нужно заказать: {to_order} шт.")
+    with col1:
+        dessert = st.selectbox("Выберите десерт", inventory["Название"].unique())
+    with col2:
+        leftover = st.number_input("Остаток (шт)", min_value=0, step=1)
+
+    if st.button("Добавить в список"):
+        target = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
+        to_order = int(target - leftover) if target > leftover else 0
+        
+        # Добавляем в список в памяти
+        st.session_state.order_list.append({
+            "Дата": datetime.now().strftime("%d.%m.%Y"),
+            "Десерт": dessert,
+            "Остаток": leftover,
+            "Заказать": to_order
+        })
+        st.toast(f"Добавлено: {dessert}")
+
+# 3. Отображение текущего черновика заказа
+if st.session_state.order_list:
+    st.divider()
+    st.subheader("🛒 Текущая заявка")
+    df_order = pd.DataFrame(st.session_state.order_list)
+    st.table(df_order)
     
-    # Чтобы записывать данные обратно в Google Таблицу через этот метод, 
-    # нужно использовать st.write или выводить список для копирования.
-    st.warning("Для автоматической записи нужно настроить API, но для начала давай добьемся отображения данных!")
+    if st.button("Очистить список"):
+        st.session_state.order_list = []
+        st.rerun()
+
+    # 4. Скачивание файла
+    csv_data = df_order.to_csv(index=False).encode('utf-8-sig')
+    st.download_button(
+        label="📥 Скачать заявку в Excel (CSV)",
+        data=csv_data,
+        file_name=f"zakaz_{datetime.now().strftime('%d_%m')}.csv",
+        mime="text/csv"
+    )
