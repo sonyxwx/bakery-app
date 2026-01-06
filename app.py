@@ -1,56 +1,40 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 from datetime import datetime
 
 st.set_page_config(page_title="Кондитерская Учет", layout="centered")
 st.title("🍰 Система заказов")
 
-# 1. Подключение
+# Твоя ссылка на таблицу
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1esisqKI9bcqwo7ZtSNKmBMx9hY5RsPgiWO_ThRH250M/export?format=csv&gid=0"
+
+# 1. Чтение данных (через прямую ссылку на CSV)
 try:
-    conn = st.connection("gsheets", type=GSheetsConnection)
-    # Пытаемся прочитать лист Inventory
-    inventory = conn.read(worksheet="Inventory")
-    st.success("Соединение с таблицей установлено!")
+    # gid=0 — это обычно первый лист (Inventory)
+    inventory = pd.read_csv(SHEET_URL)
+    st.success("Данные склада загружены!")
 except Exception as e:
-    st.error("❌ ОШИБКА ПОДКЛЮЧЕНИЯ:")
-    st.write("1. Проверь, что внизу таблицы лист называется именно **Inventory**")
-    st.write("2. Проверь, что доступ открыт: 'Все, у кого есть ссылка — Редактор'")
-    st.write(f"Техническая ошибка: {e}")
+    st.error("❌ Не удалось прочитать таблицу")
+    st.write("Убедись, что в таблице открыт доступ: 'Все, у кого есть ссылка — Читатель (или Редактор)'")
     st.stop()
 
-# 2. Проверка колонок
-if "Название" not in inventory.columns or "Норма_запаса" not in inventory.columns:
-    st.error("❌ ОШИБКА В ТАБЛИЦЕ:")
-    st.write("В листе **Inventory** должны быть заголовки в первой строке: **Название** и **Норма_запаса**")
-    st.write(f"Сейчас я вижу колонки: {list(inventory.columns)}")
+# 2. Проверка колонок (важно, чтобы названия в таблице были ТОЧНО такими)
+if "Название" not in inventory.columns:
+    st.error(f"В таблице нет колонки 'Название'. Я вижу: {list(inventory.columns)}")
     st.stop()
 
-# 3. Интерфейс
-with st.form("input_form"):
-    dessert = st.selectbox("Выберите десерт", inventory["Название"].dropna().unique())
-    leftover = st.number_input("Остаток вечером (шт)", min_value=0, step=1)
-    submit = st.form_submit_button("Рассчитать заказ")
+# 3. Форма
+with st.form("order_form"):
+    dessert = st.selectbox("Выберите десерт", inventory["Название"].tolist())
+    leftover = st.number_input("Сколько осталось (шт)", min_value=0, step=1)
+    submit = st.form_submit_button("Рассчитать")
 
 if submit:
-    try:
-        target = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
-        to_order = int(target - leftover) if target > leftover else 0
-        
-        # Запись в лист Sales
-        new_row = pd.DataFrame([{
-            "Дата": datetime.now().strftime("%d.%m.%Y"),
-            "Название": dessert,
-            "Остаток_вечер": leftover,
-            "Заказать": to_order
-        }])
-        
-        sales_df = conn.read(worksheet="Sales")
-        updated_sales = pd.concat([sales_df, new_row], ignore_index=True)
-        conn.update(worksheet="Sales", data=updated_sales)
-        
-        st.balloons()
-        st.success(f"Записано! Нужно заказать: {to_order} шт.")
-    except Exception as e:
-        st.error(f"Ошибка при сохранении: {e}")
-        st.info("Проверь, создан ли второй лист с названием **Sales**")
+    target = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
+    to_order = int(target - leftover) if target > leftover else 0
+    
+    st.info(f"Нужно заказать: {to_order} шт.")
+    
+    # Чтобы записывать данные обратно в Google Таблицу через этот метод, 
+    # нужно использовать st.write или выводить список для копирования.
+    st.warning("Для автоматической записи нужно настроить API, но для начала давай добьемся отображения данных!")
