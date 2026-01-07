@@ -24,25 +24,20 @@ except Exception as e:
     st.stop()
 
 # 3. Интерфейс программы
-st.subheader("Ввод остатков на вечер")
-
-with st.form("bakery_form", clear_on_submit=True):
-    dessert = st.selectbox("Выберите десерт", inventory["Название"].tolist())
-    leftover = st.number_input("Сколько штук осталось?", min_value=0, step=1)
-    
-    submitted = st.form_submit_button("✅ Сохранить и рассчитать")
-
 if submitted:
-    # Ищем норму запаса для выбранного десерта
     try:
-        target = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
+        # Берем значение и принудительно превращаем в число (float), чтобы избежать ошибки
+        target_raw = inventory.loc[inventory["Название"] == dessert, "Норма_запаса"].values[0]
+        target = float(target_raw) 
+        
+        # Считаем разницу
         to_order = int(target - leftover) if target > leftover else 0
         
         # Подготовка данных для отправки в Google Форму
         form_data = {
-            "entry.979173601": dessert,      # Название
-            "entry.1913568263": str(leftover), # Остаток
-            "entry.1313809346": str(to_order)  # Сколько заказать
+            "entry.979173601": dessert,      
+            "entry.1913568263": str(leftover), 
+            "entry.1313809346": str(to_order)  
         }
         
         # Отправка запроса
@@ -51,12 +46,9 @@ if submitted:
         if response.status_code == 200:
             st.balloons()
             st.success(f"Данные сохранены!")
-            st.info(f"Для '{dessert}' норма {target} шт. Нужно заказать на завтра: **{to_order} шт.**")
+            st.info(f"Для '{dessert}' норма {int(target)} шт. Нужно заказать на завтра: **{to_order} шт.**")
         else:
-            st.error("Ошибка при сохранении в таблицу. Проверьте настройки формы.")
+            st.error("Ошибка при сохранении в таблицу.")
             
     except Exception as e:
         st.error(f"Произошла ошибка: {e}")
-
-st.divider()
-st.caption("Данные автоматически улетают в вашу Google Таблицу (лист 'Ответы на форму')")
